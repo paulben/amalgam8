@@ -29,6 +29,7 @@ var DefaultConfig = Config{
 		Host: "",
 		Port: 0,
 		Type: "http",
+		TTL:  60 * time.Second,
 	},
 
 	Registry: Registry{

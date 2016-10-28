@@ -38,9 +38,10 @@ type Service struct {
 
 // Endpoint configuration
 type Endpoint struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
-	Type string `yaml:"type"`
+	Host string        `yaml:"host"`
+	Port int           `yaml:"port"`
+	Type string        `yaml:"type"`
+	TTL  time.Duration `yaml:"ttl"`
 }
 
 // Registry configuration
@@ -183,6 +184,7 @@ func (c *Config) loadFromContext(context *cli.Context) error {
 	loadFromContextIfSet(&c.Endpoint.Host, endpointHostFlag)
 	loadFromContextIfSet(&c.Endpoint.Port, endpointPortFlag)
 	loadFromContextIfSet(&c.Endpoint.Type, endpointTypeFlag)
+	loadFromContextIfSet(&c.Endpoint.TTL, endpointTTLFlag)
 	loadFromContextIfSet(&c.Registry.URL, registryURLFlag)
 	loadFromContextIfSet(&c.Registry.Token, registryTokenFlag)
 	loadFromContextIfSet(&c.Registry.Poll, registryPollFlag)
@@ -287,6 +289,7 @@ func (c *Config) Validate() error {
 			IsNotEmpty("Service Name", c.Service.Name),
 			IsInRange("Service Endpoint Port", c.Endpoint.Port, 1, 65535),
 			IsInSet("Service Endpoint Type", c.Endpoint.Type, []string{"http", "https", "tcp", "udp", "user"}),
+			IsInRangeDuration("Service Endpoint TTL", c.Endpoint.TTL, 30*time.Second, 120*time.Second),
 		)
 	}
 
