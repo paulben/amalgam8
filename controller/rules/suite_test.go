@@ -12,40 +12,16 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-package config
+package rules
 
-import "time"
+import (
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
-// DefaultConfig defines default values for the various configuration options
-var DefaultConfig = Config{
-	Register: false,
-	Proxy:    false,
+	"testing"
+)
 
-	Service: Service{
-		Name: "",
-		Tags: nil,
-	},
-	Endpoint: Endpoint{
-		Host: "",
-		Port: 0,
-		Type: "http",
-		TTL:  60 * time.Second,
-	},
-
-	Registry: Registry{
-		URL:   "",
-		Token: "",
-		Poll:  time.Duration(15 * time.Second),
-	},
-	Controller: Controller{
-		URL:   "",
-		Token: "",
-		Poll:  time.Duration(15 * time.Second),
-	},
-
-	HealthChecks: nil,
-
-	LogLevel: "info",
-
-	Commands: nil,
+func TestAPI(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Rules Suite")
 }
