@@ -289,7 +289,7 @@ func (c *Config) Validate() error {
 			IsNotEmpty("Service Name", c.Service.Name),
 			IsInRange("Service Endpoint Port", c.Endpoint.Port, 1, 65535),
 			IsInSet("Service Endpoint Type", c.Endpoint.Type, []string{"http", "https", "tcp", "udp", "user"}),
-			IsInRangeDuration("Service Endpoint TTL", c.Endpoint.TTL, 30*time.Second, 120*time.Second),
+			IsInRangeDuration("Service Endpoint TTL", c.Endpoint.TTL, 10*time.Second, 10*time.Minute),
 		)
 	}
 
