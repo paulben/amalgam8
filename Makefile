@@ -41,6 +41,7 @@ APP_VER		:= $(shell git describe 2> /dev/null || echo "unknown")
 REGISTRY_APP_NAME		:= a8registry
 CONTROLLER_APP_NAME		:= a8controller
 SIDECAR_APP_NAME		:= a8sidecar
+CLI_APP_NAME			:=  a8ctl-beta
 
 REGISTRY_IMAGE_NAME		:= amalgam8/a8-registry:latest
 CONTROLLER_IMAGE_NAME	:= amalgam8/a8-controller:latest
@@ -53,13 +54,14 @@ SIDECAR_DOCKERFILE		:= $(DOCKERDIR)/Dockerfile.sidecar.ubuntu
 REGISTRY_RELEASE_NAME	:= $(REGISTRY_APP_NAME)-$(APP_VER)-$(GOOS)-$(GOARCH)
 CONTROLLER_RELEASE_NAME	:= $(CONTROLLER_APP_NAME)-$(APP_VER)-$(GOOS)-$(GOARCH)
 SIDECAR_RELEASE_NAME	:= $(SIDECAR_APP_NAME)-$(APP_VER)-$(GOOS)-$(GOARCH)
+CLI_RELEASE_NAME	:= $(CLI_APP_NAME)-$(APP_VER)-$(GOOS)-$(GOARCH)
 
 EXAMPLES_RELEASE_NAME	:= a8examples-$(APP_VER)
 
 # build flags
-BUILDFLAGS	:= 
+BUILDFLAGS	:=
 
-# linker flags 
+# linker flags
 LDFLAGS     :=
 
 # linker flags to strip symbol tables and debug information
@@ -91,9 +93,9 @@ precommit: format verify
 #---------
 #-- build
 #---------
-.PHONY: build build.registry build.controller build.sidecar compile clean
+.PHONY: build build.registry build.controller build.sidecar build.cli compile clean
 
-build: build.registry build.controller build.sidecar
+build: build.registry build.controller build.sidecar build.cli
 
 build.registry:
 	@echo "--> building registry"
@@ -106,6 +108,12 @@ build.controller:
 build.sidecar:
 	@echo "--> building sidecar"
 	@go build $(BUILDFLAGS) -ldflags '$(LDFLAGS)' -o $(BINDIR)/$(SIDECAR_APP_NAME) ./cmd/sidecar/
+
+build.cli: tools.go-bindata
+	@echo "--> building cli"
+	@go-bindata -pkg=utils -prefix "./cli" -o ./cli/utils/i18n_resources.go ./cli/locales
+	@go build $(BUILDFLAGS) -ldflags '$(LDFLAGS)' -o $(BINDIR)/$(CLI_APP_NAME) ./cmd/cli/
+	@goimports -w ./cli/utils/i18n_resources.go
 
 compile:
 	@echo "--> compiling packages"
@@ -194,12 +202,12 @@ dockerize.sidecar:
 #-- release
 #---------------
 
-.PHONY: release release.registry release.controller release.sidecar release.examples compress compress.registry compress.controller compress.sidecar
+.PHONY: release release.registry release.controller release.sidecar release.cli release.examples compress compress.registry compress.controller compress.sidecar compress.cli
 
-release: release.registry release.controller release.sidecar release.examples
+release: release.registry release.controller release.sidecar release.cli release.examples
 
 
-compress: COMPRESSED_FILE := 
+compress: COMPRESSED_FILE :=
 compress:
 	@upx -qqt $(COMPRESSED_FILE); RESULT=$$?; if [ $$RESULT -eq 2 ]; then \
 		echo "--> compressing $(COMPRESSED_FILE)"; \
@@ -207,24 +215,27 @@ compress:
 	elif [ $$RESULT -eq 1 ]; then \
 		false; \
 	fi
-	
+
 compress.registry: tools.upx
 	@make --no-print-directory compress COMPRESSED_FILE=$(BINDIR)/$(REGISTRY_APP_NAME)
-	
+
 compress.controller: tools.upx
 	@make --no-print-directory compress COMPRESSED_FILE=$(BINDIR)/$(CONTROLLER_APP_NAME)
 
 compress.sidecar: tools.upx
 	@make --no-print-directory compress COMPRESSED_FILE=$(BINDIR)/$(SIDECAR_APP_NAME)
-	
+
+compress.cli: tools.upx
+	@make --no-print-directory compress COMPRESSED_FILE=$(BINDIR)/$(CLI_APP_NAME)
+
 release.registry:
 	@echo "--> packaging registry for release"
-	@mkdir -p $(RELEASEDIR) 
+	@mkdir -p $(RELEASEDIR)
 	@tar -czf $(RELEASEDIR)/$(REGISTRY_RELEASE_NAME).tar.gz --transform 's:^.*/::' $(BINDIR)/$(REGISTRY_APP_NAME) README.md LICENSE
 
 release.controller:
 	@echo "--> packaging controller for release"
-	@mkdir -p $(RELEASEDIR) 
+	@mkdir -p $(RELEASEDIR)
 	@tar -czf $(RELEASEDIR)/$(CONTROLLER_RELEASE_NAME).tar.gz --transform 's:^.*/::' $(BINDIR)/$(CONTROLLER_APP_NAME) README.md LICENSE
 
 release.sidecar:
@@ -243,6 +254,11 @@ release.sidecar:
 	@cp openresty/*.tar.gz $(BUILDDIR)/opt/openresty_dist/
 	@tar -C $(BUILDDIR) -czf $(RELEASEDIR)/$(SIDECAR_RELEASE_NAME).tar.gz --transform 's:^./::' .
 	@sed -e "s/A8SIDECAR_RELEASE=.*/A8SIDECAR_RELEASE=$(APP_VER)/" scripts/a8sidecar.sh > $(RELEASEDIR)/a8sidecar.sh
+
+release.cli:
+	@echo "--> packaging cli for release"
+	@mkdir -p $(RELEASEDIR)
+	@tar -czf $(RELEASEDIR)/$(CLI_RELEASE_NAME).tar.gz --transform 's:^.*/::' $(BINDIR)/$(CLI_APP_NAME) README.md LICENSE
 
 release.examples:
 	@echo "--> packaging examples for release"
@@ -295,4 +311,10 @@ tools.upx:
 		mkdir -p /tmp/$$UPX_RELEASE; \
 		wget -qO- https://github.com/upx/upx/releases/download/v$$UPX_VERSION/$$UPX_RELEASE.tar.bz2 | tar xj -C /tmp/$$UPX_RELEASE; \
 		cp /tmp/$$UPX_RELEASE/$$UPX_RELEASE/upx ~/bin; \
+	fi
+
+tools.go-bindata:
+	@command -v go-bindata >/dev/null ; if [ $$? -ne 0 ]; then \
+		echo "--> installing go-bindata"; \
+		go get -u github.com/jteeuwen/go-bindata/...; \
 	fi
