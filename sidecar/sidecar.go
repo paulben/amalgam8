@@ -21,9 +21,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/urfave/cli"
+
+	"time"
+
 	controllerclient "github.com/amalgam8/amalgam8/controller/client"
 	"github.com/amalgam8/amalgam8/controller/rules"
 	"github.com/amalgam8/amalgam8/pkg/adapters/registry/eureka"
@@ -36,13 +39,12 @@ import (
 	"github.com/amalgam8/amalgam8/sidecar/debug"
 	"github.com/amalgam8/amalgam8/sidecar/dns"
 	"github.com/amalgam8/amalgam8/sidecar/proxy"
+	"github.com/amalgam8/amalgam8/sidecar/proxy/envoy"
 	"github.com/amalgam8/amalgam8/sidecar/proxy/monitor"
-	"github.com/amalgam8/amalgam8/sidecar/proxy/nginx"
 	"github.com/amalgam8/amalgam8/sidecar/register"
 	"github.com/amalgam8/amalgam8/sidecar/register/healthcheck"
 	"github.com/amalgam8/amalgam8/sidecar/supervisor"
 	"github.com/ant0ine/go-json-rest/rest"
-	"github.com/urfave/cli"
 )
 
 // Main is the entrypoint for the sidecar when running as an executable
@@ -234,14 +236,15 @@ func buildServiceDiscovery(conf *config.Config) (api.ServiceDiscovery, error) {
 func startProxy(conf *config.Config, discovery api.ServiceDiscovery) error {
 	var err error
 
-	nginxClient := nginx.NewClient("http://localhost:5813")
-	nginxManager := nginx.NewManager(
-		nginx.Config{
-			Service: nginx.NewService(fmt.Sprintf("%v:%v", conf.Service.Name, strings.Join(conf.Service.Tags, ","))),
-			Client:  nginxClient,
-		},
-	)
-	nginxProxy := proxy.NewNGINXProxy(nginxManager)
+	//nginxClient := nginx.NewClient("http://localhost:5813")
+	//nginxManager := nginx.NewManager(
+	//	nginx.Config{
+	//		Service: nginx.NewService(fmt.Sprintf("%v:%v", conf.Service.Name, strings.Join(conf.Service.Tags, ","))),
+	//		Client:  nginxClient,
+	//	},
+	//)
+	manager := envoy.NewManager()
+	envoyProxy := proxy.NewEnvoyProxy(manager)
 
 	controllerClient, err := controllerclient.New(controllerclient.Config{
 		URL:       conf.Controller.URL,
@@ -255,7 +258,7 @@ func startProxy(conf *config.Config, discovery api.ServiceDiscovery) error {
 	controllerMonitor := monitor.NewControllerMonitor(monitor.ControllerConfig{
 		Client: controllerClient,
 		Listeners: []monitor.ControllerListener{
-			nginxProxy,
+			envoyProxy,
 		},
 		PollInterval: conf.Controller.Poll,
 	})
@@ -263,7 +266,7 @@ func startProxy(conf *config.Config, discovery api.ServiceDiscovery) error {
 	registryMonitor := monitor.NewRegistryMonitor(monitor.RegistryConfig{
 		Discovery: discovery,
 		Listeners: []monitor.RegistryListener{
-			nginxProxy,
+			envoyProxy,
 		},
 	})
 
@@ -278,7 +281,7 @@ func startProxy(conf *config.Config, discovery api.ServiceDiscovery) error {
 		}
 	}()
 
-	debugger := debug.NewAPI(nginxProxy)
+	debugger := debug.NewAPI(envoyProxy)
 
 	a := rest.NewApi()
 	a.Use(

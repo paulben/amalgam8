@@ -25,13 +25,13 @@ import (
 
 // API handles debugging API calls to sidecar for checking state
 type API struct {
-	nginxProxy proxy.NGINXProxy
+	proxy proxy.EnvoyProxy
 }
 
 // NewAPI creates struct
-func NewAPI(nginxProxy proxy.NGINXProxy) *API {
+func NewAPI(proxy proxy.EnvoyProxy) *API {
 	return &API{
-		nginxProxy: nginxProxy,
+		proxy: proxy,
 	}
 }
 
@@ -51,7 +51,7 @@ func (d *API) Routes(middlewares ...rest.Middleware) []*rest.Route {
 // from registry stored in sidecar memory
 func (d *API) checkState(w rest.ResponseWriter, req *rest.Request) {
 
-	cachedInstances, cachedRules := d.nginxProxy.GetState()
+	cachedInstances, cachedRules := d.proxy.GetState()
 
 	state := struct {
 		Instances []api.ServiceInstance `json:"instances"`
