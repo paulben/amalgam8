@@ -64,7 +64,17 @@ func (s *server) Start() error {
 	if err != nil {
 		return err
 	}
-	return s.serve(handler)
+
+	go func() {
+		err = s.serve(handler)
+		if err != nil {
+			s.logger.WithFields(log.Fields{
+				"error": err,
+			}).Warn("Failed to start the server")
+		}
+	}()
+
+	return nil
 }
 
 func (s *server) Stop() {
