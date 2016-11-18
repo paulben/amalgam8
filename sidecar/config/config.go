@@ -152,6 +152,8 @@ type Config struct {
 	Commands []Command `yaml:"commands"`
 
 	Debug string
+
+	DiscoveryPort int
 }
 
 // New creates a new Config object from the given commandline flags, environment variables, and configuration file context.
@@ -256,6 +258,7 @@ func (c *Config) loadFromContext(context *cli.Context) error {
 	loadFromContextIfSet(&c.Dnsconfig.Domain, dnsConfigDomainFlag)
 	loadFromContextIfSet(&c.LogLevel, logLevelFlag)
 	loadFromContextIfSet(&c.Debug, debugFlag)
+	loadFromContextIfSet(&c.DiscoveryPort, discoveryPortFlag)
 
 	if context.IsSet(serviceFlag) {
 		name, tags := parseServiceNameAndTags(context.String(serviceFlag))
