@@ -108,6 +108,7 @@ func (suite *TestSuite) SetupTest() {
 
 func (suite *TestSuite) TearDownTest() {
 	discoveryServer.Stop()
+	time.Sleep((200) * time.Millisecond)
 }
 
 func (suite *TestSuite) TestGetRegistrationCart() {
