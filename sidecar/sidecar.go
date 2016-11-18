@@ -182,6 +182,25 @@ func Run(conf config.Config) error {
 		time.AfterFunc(1*time.Second, lifecycle.Start)
 	}
 
+	if conf.DiscoveryPort == 0 {
+		conf.DiscoveryPort = 6500
+	}
+
+	serverConfig := &register.Config{
+		HTTPAddressSpec: fmt.Sprintf(":%d", conf.DiscoveryPort),
+		Discovery:       discovery,
+	}
+	server, err := register.NewDiscoveryServer(serverConfig)
+	if err != nil {
+		logrus.WithError(err).Error("Discovery server failed to start")
+		return err
+	}
+	err = server.Start()
+	if err != nil {
+		logrus.WithError(err).Error("Discovery server failed to start")
+		return err
+	}
+
 	appSupervisor := supervisor.NewAppSupervisor(&conf, lifecycle)
 	appSupervisor.DoAppSupervision()
 
