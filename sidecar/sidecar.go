@@ -113,10 +113,6 @@ func Run(conf config.Config) error {
 			return err
 		}
 
-		if conf.DiscoveryPort == 0 {
-			conf.DiscoveryPort = 6500
-		}
-
 		serverConfig := &register.Config{
 			HTTPAddressSpec: fmt.Sprintf(":%d", conf.DiscoveryPort),
 			Discovery:       discovery,
