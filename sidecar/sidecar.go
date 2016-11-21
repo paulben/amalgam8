@@ -101,6 +101,21 @@ func Run(conf config.Config) error {
 			logrus.WithError(err).Error("Could not create service discovery backend adapter")
 			return err
 		}
+
+		serverConfig := &register.Config{
+			HTTPAddressSpec: fmt.Sprintf(":%d", conf.DiscoveryPort),
+			Discovery:       discovery,
+		}
+		server, err := register.NewDiscoveryServer(serverConfig)
+		if err != nil {
+			logrus.WithError(err).Error("Discovery server failed to start")
+			return err
+		}
+		err = server.Start()
+		if err != nil {
+			logrus.WithError(err).Error("Discovery server failed to start")
+			return err
+		}
 	}
 
 	if conf.DNS {

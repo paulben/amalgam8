@@ -152,6 +152,8 @@ type Config struct {
 	Commands []Command `yaml:"commands"`
 
 	Debug string
+
+	DiscoveryPort int
 }
 
 // New creates a new Config object from the given commandline flags, environment variables, and configuration file context.
@@ -256,6 +258,7 @@ func (c *Config) loadFromContext(context *cli.Context) error {
 	loadFromContextIfSet(&c.Dnsconfig.Domain, dnsConfigDomainFlag)
 	loadFromContextIfSet(&c.LogLevel, logLevelFlag)
 	loadFromContextIfSet(&c.Debug, debugFlag)
+	loadFromContextIfSet(&c.DiscoveryPort, discoveryPortFlag)
 
 	if context.IsSet(serviceFlag) {
 		name, tags := parseServiceNameAndTags(context.String(serviceFlag))
@@ -349,7 +352,8 @@ func (c *Config) Validate() error {
 	validators = append(validators,
 		IsInSet("Registry backend", c.Registry.Backend, []string{Amalgam8Backend, KubernetesBackend, EurekaBackend}),
 		IsEmptyOrValidURL("Amalgam8 Registry URL", c.Registry.Amalgam8.URL),
-		IsEmptyOrValidURL("Kubernetes URL", c.Registry.Kubernetes.URL))
+		IsEmptyOrValidURL("Kubernetes URL", c.Registry.Kubernetes.URL),
+		IsInRange("Service Discovery Port", c.DiscoveryPort, 1, 65535))
 	for _, url := range c.Registry.Eureka.URLs {
 		validators = append(validators, IsEmptyOrValidURL("Eureka URL", url))
 	}
