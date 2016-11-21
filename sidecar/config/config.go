@@ -352,7 +352,8 @@ func (c *Config) Validate() error {
 	validators = append(validators,
 		IsInSet("Registry backend", c.Registry.Backend, []string{Amalgam8Backend, KubernetesBackend, EurekaBackend}),
 		IsEmptyOrValidURL("Amalgam8 Registry URL", c.Registry.Amalgam8.URL),
-		IsEmptyOrValidURL("Kubernetes URL", c.Registry.Kubernetes.URL))
+		IsEmptyOrValidURL("Kubernetes URL", c.Registry.Kubernetes.URL),
+		IsInRange("Service Discovery Port", c.DiscoveryPort, 1, 65535))
 	for _, url := range c.Registry.Eureka.URLs {
 		validators = append(validators, IsEmptyOrValidURL("Eureka URL", url))
 	}

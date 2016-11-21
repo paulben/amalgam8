@@ -454,6 +454,7 @@ registry:
 					Env:    []string{},
 					OnExit: TerminateProcess,
 				}},
+				DiscoveryPort: 6500,
 			}
 		})
 
@@ -483,6 +484,11 @@ registry:
 
 		It("rejects Command with empty command", func() {
 			c.Commands[0].Cmd = []string{}
+			Expect(c.Validate()).To(HaveOccurred())
+		})
+
+		It("rejects DiscoverPort with out of range port", func() {
+			c.DiscoveryPort = 999999
 			Expect(c.Validate()).To(HaveOccurred())
 		})
 	})

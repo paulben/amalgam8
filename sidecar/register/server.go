@@ -50,7 +50,7 @@ func NewDiscoveryServer(conf *Config) (Server, error) {
 	}
 
 	s := &server{
-		config: &*conf,
+		config: conf,
 		logger: logging.GetLogger(module),
 	}
 
@@ -80,10 +80,12 @@ func (s *server) Start() error {
 func (s *server) Stop() {
 	s.logger.Info("Stopping rest server")
 
-	if err := s.listener.Close(); err != nil {
-		s.logger.WithFields(log.Fields{
-			"error": err,
-		}).Warn("Failed to close listener")
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			s.logger.WithFields(log.Fields{
+				"error": err,
+			}).Warn("Failed to close listener")
+		}
 	}
 }
 
@@ -96,8 +98,6 @@ func (s *server) setup() (http.Handler, error) {
 		&rest.RecorderMiddleware{},
 		&rest.ContentTypeCheckerMiddleware{},
 	)
-
-	log.SetOutput(s.logger.Logger.Out)
 
 	discoveryAPI := discovery.NewDiscovery(s.config.Discovery)
 
