@@ -258,7 +258,7 @@ func startProxy(conf *config.Config, discovery api.ServiceDiscovery) error {
 	//		Client:  nginxClient,
 	//	},
 	//)
-	manager := envoy.NewManager()
+	manager := envoy.NewManager(conf.Service.Name)
 	envoyProxy := proxy.NewEnvoyProxy(manager)
 
 	controllerClient, err := controllerclient.New(controllerclient.Config{
