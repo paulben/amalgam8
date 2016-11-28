@@ -171,7 +171,7 @@ func TestConvert2(t *testing.T) {
 		{
 			ID:          "abcdef",
 			Destination: "service2",
-			Actions:     []rules.FancyAction{},
+			Actions:     []rules.Action{},
 		},
 	}
 

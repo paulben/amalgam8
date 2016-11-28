@@ -26,7 +26,7 @@ func TestFilterRules(t *testing.T) {
 		Tags:        []string{"tag1", "tag2"},
 		Destination: "service1",
 		Match:       []byte(`{}`),
-		Actions:     []FancyAction{},
+		Actions:     []Action{},
 	}
 	rule2 := Rule{
 		ID:          "id1",

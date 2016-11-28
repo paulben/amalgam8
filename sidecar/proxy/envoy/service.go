@@ -6,6 +6,7 @@ import (
 	"syscall"
 )
 
+// Service manages proxy service
 type Service interface {
 	Start() error
 	Reload() error
@@ -18,12 +19,14 @@ type service struct {
 	restartEpoch int
 }
 
+// NewService creates new instance
 func NewService(config string) Service {
 	return &service{
 		config: config,
 	}
 }
 
+// Start
 func (s *service) Start() error {
 	if s.cmd != nil {
 		return nil

@@ -24,17 +24,15 @@ type Rule struct {
 	Destination string          `json:"destination"`
 	Match       json.RawMessage `json:"match,omitempty"`
 	Route       *Route          `json:"route,omitempty"`
-	Actions     []FancyAction   `json:"actions,omitempty"`
+	Actions     []Action        `json:"actions,omitempty"`
 }
 
-type ActionInterface interface {
-	GetType() string
-}
-
+// Route definition.
 type Route struct {
 	Backends []Backend `json:"backends"`
 }
 
+// Backend represents a backend to route to.
 type Backend struct {
 	Name    string   `json:"name,omitempty"`
 	Tags    []string `json:"tags"`
@@ -43,17 +41,22 @@ type Backend struct {
 	Retries int      `json:"retries,omitempty"` // FIXME: this BREAKS disabling retries by setting them to 0!
 }
 
-type FancyAction struct {
+// Action to take.
+type Action struct {
 	internal   interface{}
 	actionType string
 }
 
-func (a *FancyAction) MarshalJSON() ([]byte, error) {
+// MarshalJSON implement the json marshal function
+func (a *Action) MarshalJSON() ([]byte, error) {
 	return json.Marshal(a.internal)
 }
 
-func (a *FancyAction) UnmarshalJSON(data []byte) error {
-	action := Action{}
+// UnmarshalJSON implement the json unmarshal function
+func (a *Action) UnmarshalJSON(data []byte) error {
+	action := struct {
+		Type string `json:"action"`
+	}{}
 	err := json.Unmarshal(data, &action)
 	if err != nil {
 		return err
@@ -78,28 +81,28 @@ func (a *FancyAction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (a *FancyAction) GetType() string {
+// GetType returns action type
+func (a *Action) GetType() string {
 	return a.actionType
 }
 
-func (a *FancyAction) Internal() interface{} {
+// Internal returns
+func (a *Action) Internal() interface{} {
 	return a.internal
 }
 
-type Action struct {
-	Type string `json:"action"`
-}
-
+// DelayAction definition
 type DelayAction struct {
-	Type        string
-	Probability int      `json:"probability"`
+	Action      string   `json:"action"`
+	Probability float64  `json:"probability"`
 	Tags        []string `json:"tags"`
-	Duration    int      `json:"duration"`
+	Duration    float64  `json:"duration"`
 }
 
+// AbortAction definition
 type AbortAction struct {
-	Type        string
-	Probability int
-	Tags        []string
-	ReturnCode  int
+	Action      string   `json:"action"`
+	Probability float64  `json:"probability"`
+	Tags        []string `json:"tags"`
+	ReturnCode  int      `json:"return_code"`
 }

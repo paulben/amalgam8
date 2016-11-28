@@ -13,10 +13,12 @@ import (
 	"github.com/amalgam8/amalgam8/pkg/api"
 )
 
+// Manager for updating envoy
 type Manager interface {
 	Update(instances []api.ServiceInstance, rules []rules.Rule) error
 }
 
+// NewManager creates new instance
 func NewManager(serviceName string) Manager {
 	return &manager{
 		serviceName: serviceName,
@@ -255,14 +257,14 @@ func buildRoutes(clusters []string) ([]Route, error) {
 	return routes, nil
 }
 
-type Source struct {
+type source struct {
 	Name string   `json:"name"`
 	Tags []string `json:"tags"`
 }
 
-type Match struct {
+type match struct {
 	Headers map[string]string `json:"headers"`
-	Source  Source            `json:"source"`
+	Source  source            `json:"source"`
 }
 
 func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, error) {
@@ -278,7 +280,7 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, erro
 				logrus.WithError(err).Error("Could not marshall match field")
 				return filters, err
 			}
-			match := Match{}
+			match := match{}
 			err = json.Unmarshal(matchBytes, &match)
 			if err != nil {
 				logrus.WithError(err).Error("could not unmarshall match field")
@@ -305,7 +307,7 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, erro
 						Config: &HTTPFilterFaultConfig{
 							Delay: &HTTPDelayFilter{
 								Type:     "fixed",
-								Percent:  delay.Probability,
+								Percent:  int(delay.Probability * 100),
 								Duration: delay.Duration,
 							},
 							Headers: headers,
@@ -319,7 +321,7 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, erro
 						Name: "fault",
 						Config: &HTTPFilterFaultConfig{
 							Abort: &HTTPAbortFilter{
-								Percent:    abort.Probability,
+								Percent:    int(abort.Probability * 100),
 								HTTPStatus: abort.ReturnCode,
 							},
 							Headers: headers,

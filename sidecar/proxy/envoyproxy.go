@@ -25,7 +25,7 @@ import (
 	"github.com/amalgam8/amalgam8/sidecar/proxy/nginx"
 )
 
-// NGINXProxy updates NGINX to reflect changes in the A8 controller and A8 registry
+// EnvoyProxy updates Envoy to reflect changes in the A8 controller and A8 registry
 type EnvoyProxy interface {
 	monitor.ControllerListener
 	monitor.RegistryListener

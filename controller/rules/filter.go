@@ -100,7 +100,7 @@ func FilterRules(f Filter, rules []Rule) []Rule {
 		}
 
 		// Filter by rule type
-		if (f.RuleType == RuleAction && len(rule.Actions) == 0) ||
+		if (f.RuleType == RuleAction && rule.Actions == nil) ||
 			(f.RuleType == RuleRoute && rule.Route == nil) {
 			continue
 		}
