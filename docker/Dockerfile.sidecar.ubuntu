@@ -32,8 +32,8 @@ RUN set -ex \
     \
     && rm -rf /tmp/filebeat*
 
-RUN curl -sSL -o /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64
-RUN chmod +x /usr/bin/dumb-init
+RUN curl -sSL -o /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64 \
+    && chmod +x /usr/bin/dumb-init
 
 ADD sidecar/nginx/lua /opt/a8_lualib
 COPY sidecar/nginx/conf/*.conf /etc/nginx/
