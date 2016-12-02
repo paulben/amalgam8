@@ -1,9 +1,7 @@
 package envoy
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/amalgam8/amalgam8/controller/rules"
@@ -11,26 +9,86 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConvert(t *testing.T) {
-	instances := []api.ServiceInstance{
+func TestSanitizeRules(t *testing.T) {
+	rules := []rules.Rule{
 		{
-			ServiceName: "freeflow1",
-			Endpoint: api.ServiceEndpoint{
-				Type:  "tcp",
-				Value: "10.11.0.4:80",
+			ID:          "abcdef",
+			Destination: "service1",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Name:   "service1",
+						Tags:   []string{"tag1"},
+						Weight: 0.25,
+					},
+					{
+						Name: "service1",
+						Tags: []string{"tag2", "tag1"},
+					},
+				},
+			},
+		},
+		{
+			ID:          "abcdef",
+			Destination: "service2",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Tags: []string{"tag1"},
+					},
+				},
 			},
 		},
 	}
 
-	clusterManager := registryInstancesToClusterManager(instances)
+	sanitizeRules(rules)
 
-	assert.Len(t, clusterManager.Clusters, 1)
-	assert.Equal(t, "freeflow1", clusterManager.Clusters[0].Name)
-	assert.Len(t, clusterManager.Clusters[0].Hosts, 1)
-	assert.Equal(t, "tcp://10.11.0.4:80", clusterManager.Clusters[0].Hosts[0].URL)
+	assert.InEpsilon(t, 0.25, rules[0].Route.Backends[0].Weight, 0.01)
+	assert.Equal(t, "service1", rules[0].Route.Backends[0].Name)
+	assert.InEpsilon(t, 0.75, rules[0].Route.Backends[1].Weight, 0.01)
+	assert.Equal(t, "service1", rules[0].Route.Backends[1].Name)
+	assert.Len(t, rules[0].Route.Backends[1].Tags, 2)
+	assert.Equal(t, "tag1", rules[0].Route.Backends[1].Tags[0])
+	assert.Equal(t, "tag2", rules[0].Route.Backends[1].Tags[1])
+	assert.InEpsilon(t, 1.00, rules[1].Route.Backends[0].Weight, 0.01)
+	assert.Equal(t, "service2", rules[1].Route.Backends[0].Name)
 }
 
-func TestConvertFancy(t *testing.T) {
+func TestFS(t *testing.T) {
+	rules := []rules.Rule{
+		{
+			ID:          "abcdef",
+			Destination: "service1",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Name:   "service1",
+						Tags:   []string{"tag1"},
+						Weight: 0.25,
+					},
+				},
+			},
+		},
+		{
+			ID:          "abcdef",
+			Destination: "service1",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Name:   "service1",
+						Tags:   []string{"tag1", "tag2"},
+						Weight: 0.75,
+					},
+				},
+			},
+		},
+		{
+			ID:          "abcdef",
+			Destination: "service2",
+			Actions:     []rules.Action{},
+		},
+	}
+
 	instances := []api.ServiceInstance{
 		{
 			ServiceName: "service1",
@@ -38,6 +96,7 @@ func TestConvertFancy(t *testing.T) {
 				Type:  "tcp",
 				Value: "10.0.0.1:80",
 			},
+			Tags: []string{},
 		},
 		{
 			ServiceName: "service1",
@@ -45,59 +104,84 @@ func TestConvertFancy(t *testing.T) {
 				Type:  "tcp",
 				Value: "10.0.0.2:80",
 			},
+			Tags: []string{"tag1"},
+		},
+		{
+			ServiceName: "service1",
+			Endpoint: api.ServiceEndpoint{
+				Type:  "tcp",
+				Value: "10.0.0.3:80",
+			},
+			Tags: []string{"tag2"},
+		},
+		{
+			ServiceName: "service1",
+			Endpoint: api.ServiceEndpoint{
+				Type:  "tcp",
+				Value: "10.0.0.4:80",
+			},
+			Tags: []string{"tag1", "tag2"},
 		},
 		{
 			ServiceName: "service2",
 			Endpoint: api.ServiceEndpoint{
 				Type:  "https",
-				Value: "10.0.0.3:80",
+				Value: "10.0.0.5:80",
 			},
 		},
 	}
 
-	clusterManager := registryInstancesToClusterManager(instances)
+	sanitizeRules(rules)
+	rules = addDefaultRouteRules(rules, instances)
 
-	assert.Len(t, clusterManager.Clusters, 2)
-	assert.Equal(t, "service1", clusterManager.Clusters[0].Name)
-	assert.Len(t, clusterManager.Clusters[0].Hosts, 2)
-	assert.Equal(t, "tcp://10.0.0.1:80", clusterManager.Clusters[0].Hosts[0].URL)
-	assert.Equal(t, "tcp://10.0.0.2:80", clusterManager.Clusters[0].Hosts[1].URL)
-	assert.Equal(t, "service2", clusterManager.Clusters[1].Name)
-	assert.Len(t, clusterManager.Clusters[1].Hosts, 1)
-	assert.Equal(t, "https://10.0.0.3:80", clusterManager.Clusters[1].Hosts[0].URL)
-
-	writer := bytes.NewBufferString("")
-	err := writeConfig(writer, clusterManager)
-	assert.NoError(t, err)
-
-	//	conf := `{"cluster_manager": {
-	//  "clusters": [
-	//  {
-	//"name": "freeflow1",
-	//"connect_timeout_ms": 10000,
-	//"type": "static",
-	//"lb_type": "round_robin",
-	//"max_requests_per_connection" : 10000,
-	//"hosts": [
-	//{
-	//"url": "tcp://10.11.0.4:80"
-	//}
-	//]
-	//}
-	//]
-	//}`
-	//
-	//	assert.Equal(t, conf, writer.String())
+	//err := buildFS(rules)
+	//assert.NoError(t, err)
 }
 
-func TestEndpointConvert(t *testing.T) {
-	endpoint := api.ServiceEndpoint{
-		Type:  "http",
-		Value: "10.1.2.45",
+func TestBuildServiceName(t *testing.T) {
+	type Input struct {
+		Service string
+		Tags    []string
 	}
-	host := endpointToHost(endpoint)
 
-	assert.Equal(t, host.URL, "http://10.1.2.45")
+	type TestCase struct {
+		Input  Input
+		Output string
+	}
+}
+
+// Ensure that parse(build(s)) == s
+func TestBuildParseServiceName(t *testing.T) {
+	type TestCase struct {
+		Service string
+		Tags    []string
+	}
+
+	testCases := []TestCase{
+		{
+			Service: "service1",
+			Tags:    []string{},
+		},
+		{
+			Service: "service2",
+			Tags:    []string{"A"},
+		},
+		{
+			Service: "service3",
+			Tags:    []string{"A", "B", "C"},
+		},
+		{
+			Service: "ser__vice4_",
+			Tags:    []string{"A_", "_B", "_C_"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		s := BuildServiceName(testCase.Service, testCase.Tags)
+		service, tags := ParseServiceName(s)
+		assert.Equal(t, testCase.Service, service)
+		assert.Equal(t, testCase.Tags, tags)
+	}
 }
 
 func TestConvert2(t *testing.T) {
@@ -175,13 +259,14 @@ func TestConvert2(t *testing.T) {
 		},
 	}
 
-	configRoot, err := generateConfig(rules, instances, "gateway")
-	assert.NoError(t, err)
+	sanitizeRules(rules)
+	rules = addDefaultRouteRules(rules, instances)
 
-	data, err := json.MarshalIndent(configRoot, "", "  ")
-	assert.NoError(t, err)
+	//configRoot, err := generateConfig(rules, instances, "gateway")
+	//assert.NoError(t, err)
 
-	fmt.Println(string(data))
+	//data, err := json.MarshalIndent(configRoot, "", "  ")
+	//assert.NoError(t, err)
 }
 
 func TestBookInfo(t *testing.T) {
@@ -384,13 +469,13 @@ func TestBookInfo(t *testing.T) {
 	err = json.Unmarshal(instanceBytes, &instances)
 	assert.NoError(t, err)
 
-	configRoot, err := generateConfig(ruleList, instances, "ratings")
-	assert.NoError(t, err)
-
-	data, err := json.MarshalIndent(configRoot, "", "  ")
-	assert.NoError(t, err)
-
-	fmt.Println(string(data))
+	//configRoot, err := generateConfig(ruleList, instances, "ratings")
+	//assert.NoError(t, err)
+	//
+	//data, err := json.MarshalIndent(configRoot, "", "  ")
+	//assert.NoError(t, err)
+	//
+	//fmt.Println(string(data))
 }
 
 func TestFaults(t *testing.T) {
@@ -439,12 +524,12 @@ func TestFaults(t *testing.T) {
 	err := json.Unmarshal(ruleBytes, &ruleList)
 	assert.NoError(t, err)
 
-	filters, err := buildFaults(ruleList, "ratings")
+	_, err = buildFaults(ruleList, "ratings")
 	assert.NoError(t, err)
 
-	data, err := json.MarshalIndent(filters, "", "  ")
-	assert.NoError(t, err)
-
-	fmt.Println(string(data))
+	//data, err := json.MarshalIndent(filters, "", "  ")
+	//assert.NoError(t, err)
+	//
+	//fmt.Println(string(data))
 
 }

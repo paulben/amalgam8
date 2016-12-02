@@ -39,10 +39,22 @@ type HTTPFilter struct {
 }
 
 // Route definition
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type Runtime struct {
+	Key     string `json:"key"`
+	Default int    `json:"default"`
+}
+
 type Route struct {
-	Prefix        string `json:"prefix"`
-	PrefixRewrite string `json:"prefix_rewrite"`
-	Cluster       string `json:"cluster"`
+	Runtime       *Runtime `json:"runtime,omitempty"`
+	Prefix        string   `json:"prefix"`
+	PrefixRewrite string   `json:"prefix_rewrite"`
+	Cluster       string   `json:"cluster"`
+	Headers       []Header `json:"headers,omitempty"`
 }
 
 // VirtualHost definition
@@ -93,20 +105,34 @@ type Host struct {
 // Cluster definition
 type Cluster struct {
 	Name                     string `json:"name"`
+	ServiceName              string `json:"service_name,omitempty"`
 	ConnectTimeoutMs         int    `json:"connect_timeout_ms"`
 	Type                     string `json:"type"`
 	LbType                   string `json:"lb_type"`
 	MaxRequestsPerConnection int    `json:"max_requests_per_connection,omitempty"`
-	Hosts                    []Host `json:"hosts"`
+	Hosts                    []Host `json:"hosts,omitempty"`
+}
+
+type SDS struct {
+	Cluster        Cluster `json:"cluster"`
+	RefreshDelayMs int     `json:"refresh_delay_ms"`
 }
 
 // ClusterManager definition
 type ClusterManager struct {
 	Clusters []Cluster `json:"clusters"`
+	SDS      SDS       `json:"sds"`
+}
+
+type RootRuntime struct {
+	SymlinkRoot          string `json:"symlink_root"`
+	Subdirectory         string `json:"subdirectory"`
+	OverrideSubdirectory string `json:"override_subdirectory,omitempty"`
 }
 
 // Root definition
 type Root struct {
+	RootRuntime    RootRuntime    `json:"runtime"`
 	Listeners      []Listener     `json:"listeners"`
 	Admin          Admin          `json:"admin"`
 	ClusterManager ClusterManager `json:"cluster_manager"`

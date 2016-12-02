@@ -25,7 +25,11 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/ant0ine/go-json-rest/rest"
 
+	"sort"
+
 	"github.com/amalgam8/amalgam8/pkg/api"
+
+	"github.com/amalgam8/amalgam8/sidecar/proxy/envoy"
 )
 
 const (
@@ -45,6 +49,23 @@ type Host struct {
 	IPAddr string            `json:"ip_address"`
 	Port   uint16            `json:"port"`
 	Tags   map[string]string `json:"tags"`
+}
+
+type ByIPPort []Host
+
+func (s ByIPPort) Len() int {
+	return len(s)
+}
+
+func (s ByIPPort) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s ByIPPort) Less(i, j int) bool {
+	if s[i].IPAddr == s[j].IPAddr {
+		return s[i].Port < s[j].Port
+	}
+	return s[i].IPAddr < s[j].IPAddr
 }
 
 // Discovery handles discovery API calls
@@ -74,22 +95,29 @@ func (d *Discovery) Routes(middlewares ...rest.Middleware) []*rest.Route {
 // getRegistration
 func (d *Discovery) getRegistration(w rest.ResponseWriter, req *rest.Request) {
 	sname := req.PathParam(routeParamServiceName)
-	instances, err := d.discovery.ListServiceInstances(sname)
+	service, tags := envoy.ParseServiceName(sname)
+
+	instances, err := d.discovery.ListServiceInstances(service)
 	if err != nil {
 		logrus.WithError(err).Warnf("Failed to get the list of service instances")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 
+	filteredInstances := filterInstances(instances, tags)
+
 	resp := Hosts{
-		Hosts: translate(instances),
+		Hosts: translate(filteredInstances),
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.WriteJson(&resp)
-	return
 }
 
+// get service name, tags
+// get instances by service name
+// filter instances (only instances that have ALL the tags)
+// convert instances to SD hosts
 func translate(instances []*api.ServiceInstance) []Host {
 	hosts := []Host{}
 	tags := make(map[string]string)
@@ -105,7 +133,34 @@ func translate(instances []*api.ServiceInstance) []Host {
 		hosts = append(hosts, host)
 	}
 
+	// Ensure that order is preserved between calls.
+	sort.Sort(ByIPPort(hosts))
+
 	return hosts
+}
+
+func filterInstances(instances []*api.ServiceInstance, tags []string) []*api.ServiceInstance {
+	tagMap := make(map[string]struct{})
+	for i := range tags {
+		tagMap[tags[i]] = struct{}{}
+	}
+
+	filtered := make([]*api.ServiceInstance, 0, len(instances))
+	for _, instance := range instances {
+		count := 0
+		for i := range tags {
+			_, exists := tagMap[instance.Tags[i]]
+			if exists {
+				count++
+			}
+		}
+
+		if count == len(tags) {
+			filtered = append(filtered, instance)
+		}
+	}
+
+	return filtered
 }
 
 func splitHostPort(endpoint api.ServiceEndpoint) (string, uint16, error) {
