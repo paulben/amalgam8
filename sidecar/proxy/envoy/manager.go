@@ -8,7 +8,6 @@ import (
 	"os"
 	"sort"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/amalgam8/amalgam8/controller/rules"
 	"github.com/amalgam8/amalgam8/pkg/api"
 )
@@ -257,38 +256,15 @@ func buildRoutes(clusters []string) ([]Route, error) {
 	return routes, nil
 }
 
-type source struct {
-	Name string   `json:"name"`
-	Tags []string `json:"tags"`
-}
-
-type match struct {
-	Headers map[string]string `json:"headers"`
-	Source  source            `json:"source"`
-}
-
 func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, error) {
 
 	filters := []HTTPFilter{}
 
 	for _, rule := range ctlrRules {
-
-		headers := make([]HTTPHeader, 0)
+		var headers []HTTPHeader
 		if rule.Match != nil {
-			matchBytes, err := rule.Match.MarshalJSON()
-			if err != nil {
-				logrus.WithError(err).Error("Could not marshall match field")
-				return filters, err
-			}
-			match := match{}
-			err = json.Unmarshal(matchBytes, &match)
-			if err != nil {
-				logrus.WithError(err).Error("could not unmarshall match field")
-				return filters, err
-			}
-
-			headers = make([]HTTPHeader, 0, len(match.Headers))
-			for key, val := range match.Headers {
+			headers = make([]HTTPHeader, 0, len(rule.Match.Headers))
+			for key, val := range rule.Match.Headers {
 				headers = append(headers, HTTPHeader{
 					Name:  key,
 					Value: val,

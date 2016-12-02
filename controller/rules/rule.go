@@ -18,16 +18,26 @@ import "encoding/json"
 
 // Rule represents an individual rule.
 type Rule struct {
-	ID          string          `json:"id"`
-	Priority    int             `json:"priority"`
-	Tags        []string        `json:"tags,omitempty"`
-	Destination string          `json:"destination"`
-	Match       json.RawMessage `json:"match,omitempty"`
-	Route       *Route          `json:"route,omitempty"`
-	Actions     []Action        `json:"actions,omitempty"`
+	ID          string   `json:"id"`
+	Priority    int      `json:"priority"`
+	Tags        []string `json:"tags,omitempty"`
+	Destination string   `json:"destination"`
+	Match       *Match   `json:"match,omitempty"`
+	Route       *Route   `json:"route,omitempty"`
+	Actions     []Action `json:"actions,omitempty"`
 }
 
 // Route definition.
+type Source struct {
+	Name string   `json:"name"`
+	Tags []string `json:"tags,omitempty"`
+}
+
+type Match struct {
+	Source  Source            `json:"source"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
 type Route struct {
 	Backends []Backend `json:"backends"`
 }

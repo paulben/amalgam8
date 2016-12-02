@@ -25,7 +25,7 @@ func TestFilterRules(t *testing.T) {
 		Priority:    1,
 		Tags:        []string{"tag1", "tag2"},
 		Destination: "service1",
-		Match:       []byte(`{}`),
+		Match:       nil,
 		Actions:     []Action{},
 	}
 	rule2 := Rule{
@@ -33,7 +33,7 @@ func TestFilterRules(t *testing.T) {
 		Priority:    1,
 		Tags:        []string{},
 		Destination: "service2",
-		Match:       []byte(`{}`),
+		Match:       nil,
 		Route:       &Route{},
 	}
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amalgam8/amalgam8/registry/api"
+	"github.com/amalgam8/amalgam8/pkg/api"
 	"github.com/amalgam8/amalgam8/sidecar/register/discovery"
 	"github.com/stretchr/testify/suite"
 )
