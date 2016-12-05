@@ -17,6 +17,8 @@ import (
 	"github.com/amalgam8/amalgam8/pkg/api"
 )
 
+const EnvoyConfigPath = "/etc/envoy/envoy.json"
+
 // Manager for updating envoy
 type Manager interface {
 	Update(instances []api.ServiceInstance, rules []rules.Rule) error
@@ -26,7 +28,7 @@ type Manager interface {
 func NewManager(serviceName string) Manager {
 	return &manager{
 		serviceName: serviceName,
-		service:     NewService("/etc/envoy.json"),
+		service:     NewService(EnvoyConfigPath),
 	}
 }
 
@@ -41,7 +43,7 @@ func (m *manager) Update(instances []api.ServiceInstance, rules []rules.Rule) er
 		return err
 	}
 
-	file, err := os.Create("/etc/envoy.json")
+	file, err := os.Create(EnvoyConfigPath)
 	if err != nil {
 		return err
 	}
@@ -476,9 +478,7 @@ func buildFS(ruleList []rules.Rule) error {
 }
 
 func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, error) {
-
-	filters := []HTTPFilter{}
-
+	var filters []HTTPFilter
 	for _, rule := range ctlrRules {
 		var headers []HTTPHeader
 		if rule.Match != nil {
@@ -489,40 +489,40 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, erro
 					Value: val,
 				})
 			}
-		}
 
-		if rule.Destination == serviceName {
-			for _, action := range rule.Actions {
-				switch action.GetType() {
-				case "delay":
-					delay := action.Internal().(rules.DelayAction)
-					filter := HTTPFilter{
-						Type: "decoder",
-						Name: "fault",
-						Config: &HTTPFilterFaultConfig{
-							Delay: &HTTPDelayFilter{
-								Type:     "fixed",
-								Percent:  int(delay.Probability * 100),
-								Duration: delay.Duration,
+			if rule.Match.Source != nil && rule.Match.Source.Name == serviceName {
+				for _, action := range rule.Actions {
+					switch action.GetType() {
+					case "delay":
+						delay := action.Internal().(rules.DelayAction)
+						filter := HTTPFilter{
+							Type: "decoder",
+							Name: "fault",
+							Config: &HTTPFilterFaultConfig{
+								Delay: &HTTPDelayFilter{
+									Type:     "fixed",
+									Percent:  int(delay.Probability * 100),
+									Duration: int(delay.Duration * 1000),
+								},
+								Headers: headers,
 							},
-							Headers: headers,
-						},
-					}
-					filters = append(filters, filter)
-				case "abort":
-					abort := action.Internal().(rules.AbortAction)
-					filter := HTTPFilter{
-						Type: "decoder",
-						Name: "fault",
-						Config: &HTTPFilterFaultConfig{
-							Abort: &HTTPAbortFilter{
-								Percent:    int(abort.Probability * 100),
-								HTTPStatus: abort.ReturnCode,
+						}
+						filters = append(filters, filter)
+					case "abort":
+						abort := action.Internal().(rules.AbortAction)
+						filter := HTTPFilter{
+							Type: "decoder",
+							Name: "fault",
+							Config: &HTTPFilterFaultConfig{
+								Abort: &HTTPAbortFilter{
+									Percent:    int(abort.Probability * 100),
+									HTTPStatus: abort.ReturnCode,
+								},
+								Headers: headers,
 							},
-							Headers: headers,
-						},
+						}
+						filters = append(filters, filter)
 					}
-					filters = append(filters, filter)
 				}
 			}
 		}
@@ -533,5 +533,6 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, erro
 		Name:   "router",
 		Config: HTTPFilterRouterConfig{},
 	})
+
 	return filters, nil
 }

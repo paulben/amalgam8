@@ -25,7 +25,7 @@ import (
 	"github.com/amalgam8/amalgam8/sidecar/proxy/nginx"
 )
 
-// EnvoyProxy updates Envoy to reflect changes in the A8 controller and A8 registry
+// EnvoyProxy updates Envoy to reflect changes in the controller and registry
 type EnvoyProxy interface {
 	monitor.ControllerListener
 	monitor.RegistryListener
@@ -49,31 +49,31 @@ func NewEnvoyProxy(envoyManager nginx.Manager) EnvoyProxy {
 }
 
 // CatalogChange updates NGINX on a change in the catalog
-func (n *envoyProxy) CatalogChange(instances []api.ServiceInstance) error {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
+func (p *envoyProxy) CatalogChange(instances []api.ServiceInstance) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
-	n.instances = instances
-	return n.updateNGINX()
+	p.instances = instances
+	return p.update()
 }
 
 // RuleChange updates NGINX on a change in the proxy configuration
-func (n *envoyProxy) RuleChange(rules []rules.Rule) error {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
+func (p *envoyProxy) RuleChange(rules []rules.Rule) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
-	n.rules = rules
-	return n.updateNGINX()
+	p.rules = rules
+	return p.update()
 }
 
-func (n *envoyProxy) updateNGINX() error {
-	logrus.Debug("Updating NGINX")
-	return n.envoy.Update(n.instances, n.rules)
+func (p *envoyProxy) update() error {
+	logrus.Debug("Updating Envoy")
+	return p.envoy.Update(p.instances, p.rules)
 }
 
-func (n *envoyProxy) GetState() ([]api.ServiceInstance, []rules.Rule) {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
+func (p *envoyProxy) GetState() ([]api.ServiceInstance, []rules.Rule) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
-	return n.instances, n.rules
+	return p.instances, p.rules
 }

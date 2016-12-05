@@ -34,7 +34,7 @@ type Source struct {
 }
 
 type Match struct {
-	Source  Source            `json:"source"`
+	Source  *Source           `json:"source,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 

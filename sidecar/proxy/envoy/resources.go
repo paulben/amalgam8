@@ -8,9 +8,9 @@ type HTTPAbortFilter struct {
 
 // HTTPDelayFilter definition
 type HTTPDelayFilter struct {
-	Type     string  `json:"type,omitempty"`
-	Percent  int     `json:"fixed_delay_percent,omitempty"`
-	Duration float64 `json:"fixed_duration_ms,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Percent  int    `json:"fixed_delay_percent,omitempty"`
+	Duration int    `json:"fixed_duration_ms,omitempty"`
 }
 
 // HTTPHeader definition
