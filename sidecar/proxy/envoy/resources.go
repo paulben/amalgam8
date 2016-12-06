@@ -113,6 +113,20 @@ type Cluster struct {
 	Hosts                    []Host `json:"hosts,omitempty"`
 }
 
+type ClustersByName []Cluster
+
+func (s ClustersByName) Len() int {
+	return len(s)
+}
+
+func (s ClustersByName) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s ClustersByName) Less(i, j int) bool {
+	return s[i].Name < s[j].Name
+}
+
 type SDS struct {
 	Cluster        Cluster `json:"cluster"`
 	RefreshDelayMs int     `json:"refresh_delay_ms"`

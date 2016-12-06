@@ -95,7 +95,7 @@ func (d *Discovery) Routes(middlewares ...rest.Middleware) []*rest.Route {
 // getRegistration
 func (d *Discovery) getRegistration(w rest.ResponseWriter, req *rest.Request) {
 	sname := req.PathParam(routeParamServiceName)
-	service, tags := envoy.ParseServiceName(sname)
+	service, tags := envoy.ParseServiceKey(sname)
 
 	instances, err := d.discovery.ListServiceInstances(service)
 	if err != nil {
@@ -148,7 +148,7 @@ func filterInstances(instances []*api.ServiceInstance, tags []string) []*api.Ser
 	filtered := make([]*api.ServiceInstance, 0, len(instances))
 	for _, instance := range instances {
 		count := 0
-		for i := range tags {
+		for i := range instance.Tags {
 			_, exists := tagMap[instance.Tags[i]]
 			if exists {
 				count++

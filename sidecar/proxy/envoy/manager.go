@@ -25,34 +25,29 @@ type Manager interface {
 }
 
 // NewManager creates new instance
-func NewManager(serviceName string) Manager {
+func NewManager(serviceName string, tags []string) Manager {
 	return &manager{
 		serviceName: serviceName,
+		tags:        tags,
 		service:     NewService(EnvoyConfigPath),
 	}
 }
 
 type manager struct {
 	serviceName string
+	tags        []string
 	service     Service
 }
 
 func (m *manager) Update(instances []api.ServiceInstance, rules []rules.Rule) error {
-	conf, err := generateConfig(rules, instances, m.serviceName)
+	conf, err := generateConfig(rules, instances, m.serviceName, m.tags)
 	if err != nil {
 		return err
 	}
 
-	file, err := os.Create(EnvoyConfigPath)
-	if err != nil {
+	if err := writeConfigFile(conf); err != nil {
 		return err
 	}
-
-	if err := writeConfig(file, conf); err != nil {
-		file.Close()
-		return err
-	}
-	file.Close()
 
 	if err := m.service.Reload(); err != nil {
 		return err
@@ -61,85 +56,42 @@ func (m *manager) Update(instances []api.ServiceInstance, rules []rules.Rule) er
 	return nil
 }
 
-func writeConfig(writer io.Writer, root Root) error {
+func writeConfigFile(root Root) error {
+	file, err := os.Create(EnvoyConfigPath)
+	if err != nil {
+		return err
+	}
+
+	if err := writeConfig(file, root); err != nil {
+		file.Close()
+		return err
+	}
+
+	return file.Close()
+}
+
+func writeConfig(w io.Writer, root Root) error {
 	out, err := json.MarshalIndent(&root, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	_, err = writer.Write(out)
+	_, err = w.Write(out)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
-func ParseServiceName(s string) (string, []string) {
-	var res []string
-	buf := bytes.NewBuffer([]byte{})
-	b := []byte(s)
-
-	i := 0
-	for i = 0; i < len(b)-1; i++ {
-		if b[i] == '_' {
-			switch b[i+1] {
-			case '_':
-				buf.WriteByte('_')
-			case 's':
-				res = append(res, buf.String())
-				buf = bytes.NewBuffer([]byte{})
-			default:
-				logrus.WithField("character", b[i+1]).Warn("Unrecognized control character")
-			}
-			i++
-		} else {
-			buf.WriteByte(b[i])
-		}
-	}
-
-	if i < len(b) {
-		buf.WriteByte(b[i])
-	}
-	res = append(res, buf.String())
-
-	service := res[0]
-	tags := res[1:]
-
-	return service, tags
-}
-
-func BuildServiceName(s string, tags []string) string {
-	sort.Strings(tags) // FIXME: by reference
-
-	f := func(s string, buf *bytes.Buffer) {
-		b := []byte(s)
-		for i := range b {
-			if b[i] == '_' {
-				buf.WriteByte('_')
-			}
-			buf.WriteByte(b[i])
-		}
-	}
-
-	buf := bytes.NewBuffer([]byte{})
-	f(s, buf)
-	for i := range tags {
-		buf.WriteString("_s")
-		f(tags[i], buf)
-	}
-
-	return buf.String()
-}
-
-func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, serviceName string) (Root, error) {
+func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, serviceName string, tags []string) (Root, error) {
 	sanitizeRules(rules)
 	rules = addDefaultRouteRules(rules, instances)
 
-	clusters, err := buildClusters(rules, instances)
-	if err != nil {
-		return Root{}, err
-	}
-
+	clusters := buildClusters(rules)
 	routes := buildRoutes(rules)
 
-	filters, err := buildFaults(rules, serviceName)
+	filters, err := buildFaults(rules, serviceName, tags)
 	if err != nil {
 		return Root{}, err
 	}
@@ -179,7 +131,7 @@ func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, service
 			},
 		},
 		Admin: Admin{
-			AccessLogPath: "/var/log/envoy_access.log",
+			AccessLogPath: "/var/log/envoy_admin.log",
 			Port:          8001,
 		},
 		ClusterManager: ClusterManager{
@@ -202,47 +154,85 @@ func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, service
 	}, nil
 }
 
-type uniqueRoute struct {
-	Service string
-	Tags    []string
-}
+const (
+	ctrl      = '_' // Control character
+	ctrlSplit = 's' // Split control character
+)
 
-func buildClusters(rules []rules.Rule, instances []api.ServiceInstance) ([]Cluster, error) {
-	// Find unique routes
-	uniqueRoutes := make(map[string]uniqueRoute)
-	for _, rule := range rules {
-		if rule.Route != nil {
-			for _, backend := range rule.Route.Backends {
-				key := BuildServiceName(backend.Name, backend.Tags)
+// BuildServiceKey
+func BuildServiceKey(service string, tags []string) string {
+	sort.Strings(tags) // FIXME: by reference
 
-				uniqueRoutes[key] = uniqueRoute{
-					Service: backend.Name,
-					Tags:    backend.Tags,
-				}
+	// Guesstimate the required buffer capacity by assuming the typical individual tag length is 10 or less and that
+	// the output will at most double in size.
+	c := 2 * (len(service) + 10*len(tags))
+	buf := bytes.NewBuffer(make([]byte, 0, c))
+
+	// Writes an escaped version of the input string to the buffer.
+	escape := func(s string, buf *bytes.Buffer) {
+		data := []byte(s)
+		for i := range data {
+			if data[i] == ctrl {
+				buf.WriteByte(ctrl)
 			}
+			buf.WriteByte(data[i])
 		}
 	}
 
-	clusterMap := make(map[string]struct{})
-	for _, instance := range instances {
-		instanceTags := make(map[string]struct{})
-		for _, tag := range instance.Tags {
-			instanceTags[tag] = struct{}{}
+	// Write escaped service and tags to the buffer separated by split control characters.
+	escape(service, buf)
+	for i := range tags {
+		buf.Write([]byte{ctrl, ctrlSplit})
+		escape(tags[i], buf)
+	}
+
+	return buf.String()
+}
+
+// ParseServiceKey
+func ParseServiceKey(key string) (string, []string) {
+	res := make([]string, 0, 6) // We guesstimate that most keys are composed of less than 1 service name + 5 tags.
+	buf := bytes.NewBuffer(make([]byte, 0, len(key)))
+	data := []byte(key)
+
+	i := 0
+	for i = 0; i < len(data)-1; i++ {
+		if data[i] == ctrl {
+			switch data[i+1] {
+			case ctrl:
+				buf.WriteByte(ctrl)
+			case ctrlSplit:
+				res = append(res, buf.String())
+				buf = bytes.NewBuffer(make([]byte, 0, len(key)))
+			default:
+				// FIXME: behavior?
+				logrus.WithField("character", data[i+1]).Warn("Unrecognized control character")
+			}
+			i++
+		} else {
+			buf.WriteByte(data[i])
 		}
+	}
 
-		for key, uniqueRoute := range uniqueRoutes {
-			if uniqueRoute.Service == instance.ServiceName {
-				isSubset := true
-				for _, tag := range uniqueRoute.Tags {
-					if _, exists := instanceTags[tag]; !exists {
-						isSubset = false
-						break
-					}
-				}
+	// If the 2nd to last byte was not a control character we need to write the last byte.
+	if i == len(data)-1 {
+		buf.WriteByte(data[i])
+	}
+	res = append(res, buf.String())
 
-				if isSubset {
-					clusterMap[key] = struct{}{}
-				}
+	service := res[0]
+	tags := res[1:]
+
+	return service, tags
+}
+
+func buildClusters(rules []rules.Rule) []Cluster {
+	clusterMap := make(map[string]struct{})
+	for _, rule := range rules {
+		if rule.Route != nil {
+			for _, backend := range rule.Route.Backends {
+				key := BuildServiceKey(backend.Name, backend.Tags)
+				clusterMap[key] = struct{}{}
 			}
 		}
 	}
@@ -260,7 +250,9 @@ func buildClusters(rules []rules.Rule, instances []api.ServiceInstance) ([]Clust
 		clusters = append(clusters, cluster)
 	}
 
-	return clusters, nil
+	sort.Sort(ClustersByName(clusters))
+
+	return clusters
 }
 
 func buildRoutes(ruleList []rules.Rule) []Route {
@@ -281,10 +273,10 @@ func buildRoutes(ruleList []rules.Rule) []Route {
 			}
 
 			for _, backend := range rule.Route.Backends {
-				clusterName := BuildServiceName(backend.Name, backend.Tags)
+				clusterName := BuildServiceKey(backend.Name, backend.Tags)
 
 				runtime := &Runtime{
-					Key:     backend.Name + "." + BuildServiceName("_", backend.Tags),
+					Key:     backend.Name + "." + BuildServiceKey("_", backend.Tags),
 					Default: 0,
 				}
 
@@ -407,7 +399,7 @@ func buildFS(ruleList []rules.Rule) error {
 				w += int(100 * backend.Weight)
 				weight := weightSpec{
 					Service: backend.Name,
-					Cluster: BuildServiceName("_", backend.Tags),
+					Cluster: BuildServiceKey("_", backend.Tags),
 					Weight:  w,
 				}
 				weights = append(weights, weight)
@@ -477,8 +469,14 @@ func buildFS(ruleList []rules.Rule) error {
 	return nil
 }
 
-func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, error) {
+func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) ([]HTTPFilter, error) {
 	var filters []HTTPFilter
+
+	tagMap := make(map[string]struct{})
+	for _, tag := range tags {
+		tagMap[tag] = struct{}{}
+	}
+
 	for _, rule := range ctlrRules {
 		var headers []HTTPHeader
 		if rule.Match != nil {
@@ -491,37 +489,47 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string) ([]HTTPFilter, erro
 			}
 
 			if rule.Match.Source != nil && rule.Match.Source.Name == serviceName {
-				for _, action := range rule.Actions {
-					switch action.GetType() {
-					case "delay":
-						delay := action.Internal().(rules.DelayAction)
-						filter := HTTPFilter{
-							Type: "decoder",
-							Name: "fault",
-							Config: &HTTPFilterFaultConfig{
-								Delay: &HTTPDelayFilter{
-									Type:     "fixed",
-									Percent:  int(delay.Probability * 100),
-									Duration: int(delay.Duration * 1000),
+				isSubset := true
+				for _, tag := range rule.Tags {
+					if _, exists := tagMap[tag]; !exists {
+						isSubset = false
+						break
+					}
+				}
+
+				if isSubset {
+					for _, action := range rule.Actions {
+						switch action.GetType() {
+						case "delay":
+							delay := action.Internal().(rules.DelayAction)
+							filter := HTTPFilter{
+								Type: "decoder",
+								Name: "fault",
+								Config: &HTTPFilterFaultConfig{
+									Delay: &HTTPDelayFilter{
+										Type:     "fixed",
+										Percent:  int(delay.Probability * 100),
+										Duration: int(delay.Duration * 1000),
+									},
+									Headers: headers,
 								},
-								Headers: headers,
-							},
-						}
-						filters = append(filters, filter)
-					case "abort":
-						abort := action.Internal().(rules.AbortAction)
-						filter := HTTPFilter{
-							Type: "decoder",
-							Name: "fault",
-							Config: &HTTPFilterFaultConfig{
-								Abort: &HTTPAbortFilter{
-									Percent:    int(abort.Probability * 100),
-									HTTPStatus: abort.ReturnCode,
+							}
+							filters = append(filters, filter)
+						case "abort":
+							abort := action.Internal().(rules.AbortAction)
+							filter := HTTPFilter{
+								Type: "decoder",
+								Name: "fault",
+								Config: &HTTPFilterFaultConfig{
+									Abort: &HTTPAbortFilter{
+										Percent:    int(abort.Probability * 100),
+										HTTPStatus: abort.ReturnCode,
+									},
+									Headers: headers,
 								},
-								Headers: headers,
-							},
+							}
+							filters = append(filters, filter)
 						}
-						filters = append(filters, filter)
 					}
 				}
 			}

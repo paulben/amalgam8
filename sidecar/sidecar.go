@@ -251,14 +251,14 @@ func buildServiceDiscovery(conf *config.Config) (api.ServiceDiscovery, error) {
 func startProxy(conf *config.Config, discovery api.ServiceDiscovery) error {
 	var err error
 
-	//nginxClient := nginx.NewClient("http://localhost:5813")
-	//nginxManager := nginx.NewManager(
+	//client := nginx.NewClient("http://localhost:5813")
+	//manager := nginx.NewManager(
 	//	nginx.Config{
 	//		Service: nginx.NewService(fmt.Sprintf("%v:%v", conf.Service.Name, strings.Join(conf.Service.Tags, ","))),
 	//		Client:  nginxClient,
 	//	},
 	//)
-	manager := envoy.NewManager(conf.Service.Name)
+	manager := envoy.NewManager(conf.Service.Name, conf.Service.Tags)
 	envoyProxy := proxy.NewEnvoyProxy(manager)
 
 	controllerClient, err := controllerclient.New(controllerclient.Config{

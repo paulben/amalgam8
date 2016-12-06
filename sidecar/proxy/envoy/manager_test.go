@@ -138,20 +138,77 @@ func TestFS(t *testing.T) {
 	//assert.NoError(t, err)
 }
 
-func TestBuildServiceName(t *testing.T) {
-	type Input struct {
-		Service string
-		Tags    []string
+func TestBuildClusters(t *testing.T) {
+	rules := []rules.Rule{
+		{
+			ID:          "abcdef",
+			Destination: "service1",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Name:   "service1",
+						Tags:   []string{"tag1"},
+						Weight: 0.25,
+					},
+				},
+			},
+		},
+		{
+			ID:          "abcdef",
+			Destination: "service1",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Name:   "service1",
+						Tags:   []string{"tag1", "tag2"},
+						Weight: 0.75,
+					},
+				},
+			},
+		},
+		{
+			ID:          "abcdef",
+			Destination: "service2",
+			Route: &rules.Route{
+				Backends: []rules.Backend{
+					{
+						Name:   "service2",
+						Tags:   []string{},
+						Weight: 1.00,
+					},
+				},
+			},
+		},
+		{
+			ID:          "abcdef",
+			Destination: "service2",
+			Actions:     []rules.Action{},
+		},
 	}
 
-	type TestCase struct {
-		Input  Input
-		Output string
-	}
+	clusters := buildClusters(rules)
+
+	assert.Len(t, clusters, 3)
+
+	assert.Equal(t, Cluster{
+		Name:             "service1_stag1",
+		ServiceName:      "service1_stag1",
+		Type:             "sds",
+		LbType:           "round_robin",
+		ConnectTimeoutMs: 1000,
+	}, clusters[0])
+
+	assert.Equal(t, "service1_stag1_stag2", clusters[1].Name)
+	assert.Equal(t, "service2", clusters[2].Name)
+
+	//data, err := json.MarshalIndent(&clusters, "", " ")
+	//assert.NoError(t, err)
+	//
+	//fmt.Println(string(data))
 }
 
 // Ensure that parse(build(s)) == s
-func TestBuildParseServiceName(t *testing.T) {
+func TestBuildParseServiceKey(t *testing.T) {
 	type TestCase struct {
 		Service string
 		Tags    []string
@@ -174,11 +231,19 @@ func TestBuildParseServiceName(t *testing.T) {
 			Service: "ser__vice4_",
 			Tags:    []string{"A_", "_B", "_C_"},
 		},
+		{
+			Service: "_service5__",
+			Tags:    []string{"_A", "B", "C"},
+		},
+		{
+			Service: "",
+			Tags:    []string{},
+		},
 	}
 
 	for _, testCase := range testCases {
-		s := BuildServiceName(testCase.Service, testCase.Tags)
-		service, tags := ParseServiceName(s)
+		s := BuildServiceKey(testCase.Service, testCase.Tags)
+		service, tags := ParseServiceKey(s)
 		assert.Equal(t, testCase.Service, service)
 		assert.Equal(t, testCase.Tags, tags)
 	}
@@ -524,7 +589,7 @@ func TestFaults(t *testing.T) {
 	err := json.Unmarshal(ruleBytes, &ruleList)
 	assert.NoError(t, err)
 
-	_, err = buildFaults(ruleList, "ratings")
+	_, err = buildFaults(ruleList, "ratings", []string{"v1"})
 	assert.NoError(t, err)
 
 	//data, err := json.MarshalIndent(filters, "", "  ")
