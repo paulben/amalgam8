@@ -25,6 +25,7 @@ const (
 	configFlag              = "config"
 	registerFlag            = "register"
 	proxyFlag               = "proxy"
+	proxyAdapterFlag        = "proxy_adapter"
 	serviceFlag             = "service"
 	endpointHostFlag        = "endpoint_host"
 	endpointPortFlag        = "endpoint_port"
@@ -69,7 +70,12 @@ var Flags = []cli.Flag{
 	cli.BoolFlag{
 		Name:   proxyFlag,
 		EnvVar: envVar(proxyFlag),
-		Usage:  "Enable automatic service discovery and load balancing across services using NGINX",
+		Usage:  "Start proxy",
+	},
+	cli.StringFlag{
+		Name:   proxyAdapterFlag,
+		EnvVar: envVar(proxyAdapterFlag),
+		Usage:  "Proxy adapter (nginx, envoy)",
 	},
 	cli.BoolFlag{
 		Name:   dnsFlag,
