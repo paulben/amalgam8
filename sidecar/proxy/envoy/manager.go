@@ -19,7 +19,7 @@ import (
 
 const EnvoyConfigPath = "/etc/envoy/envoy.json"
 
-// Manager for updating envoy
+// Manager for updating envoy proxy configuration.
 type Manager interface {
 	Update(instances []api.ServiceInstance, rules []rules.Rule) error
 }
@@ -56,13 +56,13 @@ func (m *manager) Update(instances []api.ServiceInstance, rules []rules.Rule) er
 	return nil
 }
 
-func writeConfigFile(root Root) error {
+func writeConfigFile(conf Config) error {
 	file, err := os.Create(EnvoyConfigPath)
 	if err != nil {
 		return err
 	}
 
-	if err := writeConfig(file, root); err != nil {
+	if err := writeConfig(file, conf); err != nil {
 		file.Close()
 		return err
 	}
@@ -70,8 +70,8 @@ func writeConfigFile(root Root) error {
 	return file.Close()
 }
 
-func writeConfig(w io.Writer, root Root) error {
-	out, err := json.MarshalIndent(&root, "", "  ")
+func writeConfig(w io.Writer, conf Config) error {
+	out, err := json.MarshalIndent(&conf, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func writeConfig(w io.Writer, root Root) error {
 	return err
 }
 
-func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, serviceName string, tags []string) (Root, error) {
+func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, serviceName string, tags []string) (Config, error) {
 	sanitizeRules(rules)
 	rules = addDefaultRouteRules(rules, instances)
 
@@ -94,10 +94,10 @@ func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, service
 	filters := buildFaults(rules, serviceName, tags)
 
 	if err := buildFS(rules); err != nil {
-		return Root{}, err
+		return Config{}, err
 	}
 
-	return Root{
+	return Config{
 		RootRuntime: RootRuntime{
 			SymlinkRoot:  RuntimePath,
 			Subdirectory: "traffic_shift",
@@ -122,6 +122,11 @@ func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, service
 								},
 							},
 							Filters: filters,
+							AccessLog: []AccessLog{
+								{
+									Path: "/var/log/envoy_access.log",
+								},
+							},
 						},
 					},
 				},
@@ -188,7 +193,7 @@ func BuildServiceKey(service string, tags []string) string {
 
 // ParseServiceKey
 func ParseServiceKey(key string) (string, []string) {
-	res := make([]string, 0, 6) // We guesstimate that most keys are composed of less than 1 service name + 5 tags.
+	res := make([]string, 0, 6) // We guesstimate that most keys are composed of at most 1 service name + 5 tags.
 	buf := bytes.NewBuffer(make([]byte, 0, len(key)))
 	data := []byte(key)
 
@@ -252,12 +257,17 @@ func buildClusters(rules []rules.Rule) []Cluster {
 	return clusters
 }
 
+func buildWeightKey(service string, tags []string) string {
+	return fmt.Sprintf("%v.%v", service, BuildServiceKey("_", tags))
+}
+
 func buildRoutes(ruleList []rules.Rule) []Route {
 	var routes []Route
 	for _, rule := range ruleList {
 		if rule.Route != nil {
 			var headers []Header
 			if rule.Match != nil {
+				headers = make([]Header, 0, len(rule.Match.Headers))
 				for k, v := range rule.Match.Headers {
 					headers = append(
 						headers,
@@ -273,7 +283,7 @@ func buildRoutes(ruleList []rules.Rule) []Route {
 				clusterName := BuildServiceKey(backend.Name, backend.Tags)
 
 				runtime := &Runtime{
-					Key:     backend.Name + "." + BuildServiceKey("_", backend.Tags),
+					Key:     buildWeightKey(backend.Name, backend.Tags),
 					Default: 0,
 				}
 
@@ -377,9 +387,24 @@ func addDefaultRouteRules(ruleList []rules.Rule, instances []api.ServiceInstance
 }
 
 const (
+	ConfigPath          = "/etc/envoy"
 	RuntimePath         = "/etc/envoy/runtime/routing"
 	RuntimeVersionsPath = "/etc/envoy/routing_versions"
+
+	ConfigDirPerm  = 0775
+	ConfigFilePerm = 0664
 )
+
+// FIXME: doesn't check for name conflicts
+// TODO: could be improved by using the full possible set of filenames.
+func randFilename(prefix string) string {
+	data := make([]byte, 16)
+	for i := range data {
+		data[i] = '0' + byte(rand.Intn(10))
+	}
+
+	return fmt.Sprintf("%s%s", prefix, data)
+}
 
 func buildFS(ruleList []rules.Rule) error {
 	type weightSpec struct {
@@ -404,11 +429,11 @@ func buildFS(ruleList []rules.Rule) error {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(RuntimePath), 0775); err != nil { // FIXME: hack
+	if err := os.MkdirAll(filepath.Dir(RuntimePath), ConfigDirPerm); err != nil { // FIXME: hack
 		return err
 	}
 
-	if err := os.MkdirAll(RuntimeVersionsPath, 0775); err != nil {
+	if err := os.MkdirAll(RuntimeVersionsPath, ConfigDirPerm); err != nil {
 		return err
 	}
 
@@ -417,30 +442,31 @@ func buildFS(ruleList []rules.Rule) error {
 		return err
 	}
 
+	success := false
+	defer func() {
+		if !success {
+			os.RemoveAll(dirName)
+		}
+	}()
+
 	for _, weight := range weights {
-		if err := os.MkdirAll(filepath.Join(dirName, "/traffic_shift/", weight.Service), 0775); err != nil {
+		if err := os.MkdirAll(filepath.Join(dirName, "/traffic_shift/", weight.Service), ConfigDirPerm); err != nil {
 			return err
 		} // FIXME: filemode?
 
 		filename := filepath.Join(dirName, "/traffic_shift/", weight.Service, weight.Cluster)
 		data := []byte(fmt.Sprintf("%v", weight.Weight))
-		if err := ioutil.WriteFile(filename, data, 0664); err != nil {
+		if err := ioutil.WriteFile(filename, data, ConfigFilePerm); err != nil {
 			return err
 		}
 	}
 
-	// FIXME: conflicts
-	data := make([]byte, 16)
-	for i := range data {
-		data[i] = '0' + byte(rand.Intn(10))
-	}
-
-	tmpName := "./" + string(data)
-
 	oldRuntime, err := os.Readlink(RuntimePath)
-	if err != nil && !os.IsNotExist(err) { // If the error is that the symlink doesn't exist, we ignore it.
+	if err != nil && !os.IsNotExist(err) { // Ignore error from symlink not existing.
 		return err
 	}
+
+	tmpName := randFilename("./")
 
 	if err := os.Symlink(dirName, tmpName); err != nil {
 		return err
@@ -450,6 +476,8 @@ func buildFS(ruleList []rules.Rule) error {
 	if err := os.Rename(tmpName, RuntimePath); err != nil {
 		return err
 	}
+
+	success = true
 
 	// Clean up the old config FS if necessary
 	// TODO: make this safer
@@ -466,8 +494,8 @@ func buildFS(ruleList []rules.Rule) error {
 	return nil
 }
 
-func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []HTTPFilter {
-	var filters []HTTPFilter
+func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []Filter {
+	var filters []Filter
 
 	tagMap := make(map[string]struct{})
 	for _, tag := range tags {
@@ -475,11 +503,11 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []HT
 	}
 
 	for _, rule := range ctlrRules {
-		var headers []HTTPHeader
+		var headers []Header
 		if rule.Match != nil {
-			headers = make([]HTTPHeader, 0, len(rule.Match.Headers))
+			headers = make([]Header, 0, len(rule.Match.Headers))
 			for key, val := range rule.Match.Headers {
-				headers = append(headers, HTTPHeader{
+				headers = append(headers, Header{
 					Name:  key,
 					Value: val,
 				})
@@ -499,11 +527,11 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []HT
 						switch action.GetType() {
 						case "delay":
 							delay := action.Internal().(rules.DelayAction)
-							filter := HTTPFilter{
+							filter := Filter{
 								Type: "decoder",
 								Name: "fault",
-								Config: &HTTPFilterFaultConfig{
-									Delay: &HTTPDelayFilter{
+								Config: &FilterFaultConfig{
+									Delay: &DelayFilter{
 										Type:     "fixed",
 										Percent:  int(delay.Probability * 100),
 										Duration: int(delay.Duration * 1000),
@@ -514,11 +542,11 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []HT
 							filters = append(filters, filter)
 						case "abort":
 							abort := action.Internal().(rules.AbortAction)
-							filter := HTTPFilter{
+							filter := Filter{
 								Type: "decoder",
 								Name: "fault",
-								Config: &HTTPFilterFaultConfig{
-									Abort: &HTTPAbortFilter{
+								Config: &FilterFaultConfig{
+									Abort: &AbortFilter{
 										Percent:    int(abort.Probability * 100),
 										HTTPStatus: abort.ReturnCode,
 									},
@@ -533,10 +561,10 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []HT
 		}
 	}
 
-	filters = append(filters, HTTPFilter{
+	filters = append(filters, Filter{
 		Type:   "decoder",
 		Name:   "router",
-		Config: HTTPFilterRouterConfig{},
+		Config: FilterRouterConfig{},
 	})
 
 	return filters

@@ -622,7 +622,7 @@ func TestFaults(t *testing.T) {
 		assert.Equal(t, fault.Type, "decoder")
 		switch fault.Name {
 		case "fault":
-			conf, ok := fault.Config.(*HTTPFilterFaultConfig)
+			conf, ok := fault.Config.(*FilterFaultConfig)
 			assert.True(t, ok)
 			if conf.Abort != nil {
 				assert.Equal(t, conf.Abort.Percent, 80)
@@ -641,7 +641,7 @@ func TestFaults(t *testing.T) {
 				t.Fail()
 			}
 		case "router":
-			conf, ok := fault.Config.(HTTPFilterRouterConfig)
+			conf, ok := fault.Config.(FilterRouterConfig)
 			assert.True(t, ok)
 			assert.False(t, conf.DynamicStats)
 		default:
