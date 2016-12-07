@@ -16,6 +16,7 @@ package nginx
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -31,7 +32,9 @@ type Service interface {
 }
 
 // NewService creates new instance
-func NewService(name string) Service {
+func NewService(serviceName string, tags []string) Service {
+	name := fmt.Sprintf("%v:%v", serviceName, strings.Join(tags, ","))
+
 	return &service{
 		name: name,
 	}
@@ -43,7 +46,6 @@ type service struct {
 
 // Start the NGINX service
 func (s *service) Start() error {
-
 	cmd := exec.Command("nginx", "-g", "daemon on;")
 	cmdEnv := os.Environ()
 	cmdEnv = append(cmdEnv, "A8_SERVICE="+s.name)

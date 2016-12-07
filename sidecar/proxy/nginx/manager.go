@@ -55,7 +55,7 @@ func (n *manager) Update(instances []api.ServiceInstance, rules []api.Rule) erro
 
 	var err error
 
-	// Ensure NGINX is running
+	// Ensure NGINX is running.
 	running, err := n.service.Running()
 	if err != nil {
 		logrus.WithError(err).Error("Could not get status of NGINX service")
@@ -63,7 +63,7 @@ func (n *manager) Update(instances []api.ServiceInstance, rules []api.Rule) erro
 	}
 
 	if !running {
-		// NGINX is not running; attempt to start NGINX
+		// NGINX is not running; attempt to start NGINX.
 		logrus.Info("Starting NGINX")
 		if err := n.service.Start(); err != nil {
 			logrus.WithError(err).Error("Failed to start NGINX service")
