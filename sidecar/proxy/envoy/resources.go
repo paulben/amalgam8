@@ -1,47 +1,41 @@
 package envoy
 
-// HTTPAbortFilter definition
-type HTTPAbortFilter struct {
+// AbortFilter definition
+type AbortFilter struct {
 	Percent    int `json:"abort_percent,omitempty"`
 	HTTPStatus int `json:"http_status,omitempty"`
 }
 
-// HTTPDelayFilter definition
-type HTTPDelayFilter struct {
+// DelayFilter definition
+type DelayFilter struct {
 	Type     string `json:"type,omitempty"`
 	Percent  int    `json:"fixed_delay_percent,omitempty"`
 	Duration int    `json:"fixed_duration_ms,omitempty"`
 }
 
-// HTTPHeader definition
-type HTTPHeader struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-// HTTPFilterFaultConfig definition
-type HTTPFilterFaultConfig struct {
-	Abort   *HTTPAbortFilter `json:"abort,omitempty"`
-	Delay   *HTTPDelayFilter `json:"delay,omitempty"`
-	Headers []HTTPHeader     `json:"headers,omitempty"`
-}
-
-// HTTPFilterRouterConfig definition
-type HTTPFilterRouterConfig struct {
-	DynamicStats bool `json:"dynamic_stats"`
-}
-
-// HTTPFilter definition
-type HTTPFilter struct {
-	Type   string      `json:"type"`
-	Name   string      `json:"name"`
-	Config interface{} `json:"config"`
-}
-
-// Route definition
+// Header definition
 type Header struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+// FilterFaultConfig definition
+type FilterFaultConfig struct {
+	Abort   *AbortFilter `json:"abort,omitempty"`
+	Delay   *DelayFilter `json:"delay,omitempty"`
+	Headers []Header     `json:"headers,omitempty"`
+}
+
+// FilterRouterConfig definition
+type FilterRouterConfig struct {
+	DynamicStats bool `json:"dynamic_stats"`
+}
+
+// Filter definition
+type Filter struct {
+	Type   string      `json:"type"`
+	Name   string      `json:"name"`
+	Config interface{} `json:"config"`
 }
 
 type Runtime struct {
@@ -69,13 +63,21 @@ type RouteConfig struct {
 	VirtualHosts []VirtualHost `json:"virtual_hosts"`
 }
 
+// AccessLog definition.
+type AccessLog struct {
+	Path   string `json:"path"`
+	Format string `json:"format,omitempty"`
+	Filter string `json:"filter,omitempty"`
+}
+
 // NetworkFilterConfig definition
 type NetworkFilterConfig struct {
-	CodecType         string       `json:"codec_type"`
-	StatPrefix        string       `json:"stat_prefix"`
-	GenerateRequestID bool         `json:"generate_request_id"`
-	RouteConfig       RouteConfig  `json:"route_config"`
-	Filters           []HTTPFilter `json:"filters"`
+	CodecType         string      `json:"codec_type"`
+	StatPrefix        string      `json:"stat_prefix"`
+	GenerateRequestID bool        `json:"generate_request_id"`
+	RouteConfig       RouteConfig `json:"route_config"`
+	Filters           []Filter    `json:"filters"`
+	AccessLog         []AccessLog `json:"access_log"`
 }
 
 // NetworkFilter definition
@@ -145,7 +147,7 @@ type RootRuntime struct {
 }
 
 // Root definition
-type Root struct {
+type Config struct {
 	RootRuntime    RootRuntime    `json:"runtime"`
 	Listeners      []Listener     `json:"listeners"`
 	Admin          Admin          `json:"admin"`
