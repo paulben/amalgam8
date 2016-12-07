@@ -571,6 +571,32 @@ func TestFaults(t *testing.T) {
       ]
     },
     {
+      "id": "c2a22912-9479-4e0b-839b-ffe76bb0c579",
+      "priority": 10,
+      "destination": "ratings",
+      "match": {
+        "headers": {
+          "test": "myval"
+        },
+        "source": {
+          "name": "reviews",
+          "tags": [
+            "v2"
+          ]
+        }
+      },
+      "actions": [
+        {
+          "action": "abort",
+          "return_code": 418,
+          "probability": 0.8,
+          "tags": [
+  	    "v1"
+          ]
+        }
+      ]
+    },
+    {
       "id": "c67226e2-8506-4e75-9e47-84d9d24f0326",
       "priority": 1,
       "destination": "reviews",
@@ -589,12 +615,38 @@ func TestFaults(t *testing.T) {
 	err := json.Unmarshal(ruleBytes, &ruleList)
 	assert.NoError(t, err)
 
-	_, err = buildFaults(ruleList, "ratings", []string{"v1"})
-	assert.NoError(t, err)
+	faults := buildFaults(ruleList, "reviews", []string{"v1"})
 
-	//data, err := json.MarshalIndent(filters, "", "  ")
-	//assert.NoError(t, err)
-	//
-	//fmt.Println(string(data))
+	assert.Len(t, faults, 3)
+	for _, fault := range faults {
+		assert.Equal(t, fault.Type, "decoder")
+		switch fault.Name {
+		case "fault":
+			conf, ok := fault.Config.(*HTTPFilterFaultConfig)
+			assert.True(t, ok)
+			if conf.Abort != nil {
+				assert.Equal(t, conf.Abort.Percent, 80)
+				assert.Equal(t, conf.Abort.HTTPStatus, 418)
+				assert.Len(t, conf.Headers, 1)
+				assert.Equal(t, conf.Headers[0].Name, "test")
+				assert.Equal(t, conf.Headers[0].Value, "myval")
+			} else if conf.Delay != nil {
+				assert.Equal(t, conf.Delay.Type, "fixed")
+				assert.Equal(t, conf.Delay.Percent, 100)
+				assert.Equal(t, conf.Delay.Duration, 7000)
+				assert.Len(t, conf.Headers, 1)
+				assert.Equal(t, conf.Headers[0].Name, "Cookie")
+				assert.Equal(t, conf.Headers[0].Value, ".*?user=jason")
+			} else {
+				t.Fail()
+			}
+		case "router":
+			conf, ok := fault.Config.(HTTPFilterRouterConfig)
+			assert.True(t, ok)
+			assert.False(t, conf.DynamicStats)
+		default:
+			t.Fail()
+		}
+	}
 
 }

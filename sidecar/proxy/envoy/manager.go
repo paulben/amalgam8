@@ -91,10 +91,7 @@ func generateConfig(rules []rules.Rule, instances []api.ServiceInstance, service
 	clusters := buildClusters(rules)
 	routes := buildRoutes(rules)
 
-	filters, err := buildFaults(rules, serviceName, tags)
-	if err != nil {
-		return Root{}, err
-	}
+	filters := buildFaults(rules, serviceName, tags)
 
 	if err := buildFS(rules); err != nil {
 		return Root{}, err
@@ -469,7 +466,7 @@ func buildFS(ruleList []rules.Rule) error {
 	return nil
 }
 
-func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) ([]HTTPFilter, error) {
+func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) []HTTPFilter {
 	var filters []HTTPFilter
 
 	tagMap := make(map[string]struct{})
@@ -542,5 +539,5 @@ func buildFaults(ctlrRules []rules.Rule, serviceName string, tags []string) ([]H
 		Config: HTTPFilterRouterConfig{},
 	})
 
-	return filters, nil
+	return filters
 }
